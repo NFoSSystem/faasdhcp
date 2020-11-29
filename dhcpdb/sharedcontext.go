@@ -248,7 +248,7 @@ func CleanUpIpSets(client *redis.Client) error {
 	return nil
 }
 
-func InitAvailableIpRange(client *redis.Client, leasesRange uint8) {
+func InitAvailableIpRange(client *redis.Client, leasesRange uint8) error {
 	ctx := context.Background()
 
 	var bitsetStr string = ""
@@ -258,7 +258,7 @@ func InitAvailableIpRange(client *redis.Client, leasesRange uint8) {
 
 	_, err := client.Set(ctx, LEASING_RANGE_BITSET, bitsetStr, 0).Result()
 	if err != nil {
-		log.Printf("Error during init of BitSet %s\n", LEASING_RANGE_BITSET)
+		return fmt.Errorf("Error during init of BitSet %s\n", LEASING_RANGE_BITSET)
 	}
 }
 
