@@ -260,6 +260,8 @@ func InitAvailableIpRange(client *redis.Client, leasesRange uint8) error {
 	if err != nil {
 		return fmt.Errorf("Error during init of BitSet %s\n", LEASING_RANGE_BITSET)
 	}
+
+	return nil
 }
 
 func (sc *SharedContext) CleanUpExpiredMappings(leaseTime, schedule time.Duration, logger *log.Logger) error {
