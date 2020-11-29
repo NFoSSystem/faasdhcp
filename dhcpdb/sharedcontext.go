@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/krolaw/dhcp4"
@@ -52,6 +53,10 @@ func getLastRangeByte(maxLeaseRange uint8) uint8 {
 	}
 }
 
+func (sc *SharedContext) Close() error {
+	return sc.client.Close()
+}
+
 func (sc *SharedContext) GetFirstAvailableAddress() (*net.IP, error) {
 	ctx := context.Background()
 
@@ -92,7 +97,7 @@ func (sc *SharedContext) GetFirstAvailableAddress() (*net.IP, error) {
 func (sc *SharedContext) GetPortMACMapping(ipAddr *net.IP) (*net.HardwareAddr, error) {
 	ctx := context.Background()
 
-	res, err := sc.client.Get(ctx, ipAddr.String()).Result()
+	res, err := sc.client.Get(ctx, "ip:"+ipAddr.String()).Result()
 	if err != nil {
 		return nil, err
 	} else {
@@ -134,9 +139,9 @@ func (sc *SharedContext) AddIPMACMapping(ipAddr *net.IP, hwAddr *net.HardwareAdd
 				return err
 			}
 
-			_, err = tx.Set(ctx, ipAddr.String(), hwAddr.String(), leaseTime).Result()
+			_, err = tx.Set(ctx, "ip:"+ipAddr.String(), hwAddr.String(), leaseTime).Result()
 			return err
-		}, ipAddr.String(), IP_MAC_MAPPING_SET, LEASING_RANGE_BITSET)
+		}, "ip:"+ipAddr.String(), IP_MAC_MAPPING_SET, LEASING_RANGE_BITSET)
 
 		if res == nil {
 			return nil
@@ -161,7 +166,7 @@ func (sc *SharedContext) RemoveIPMapping(ipAddr *net.IP, hwAddr *net.HardwareAdd
 				return fmt.Errorf("Error no address mapping defined on db")
 			}
 
-			res, err := tx.Get(ctx, ipAddr.String()).Result()
+			res, err := tx.Get(ctx, "ip:"+ipAddr.String()).Result()
 			if err == redis.Nil {
 				// nothing to remove, maybe someone provided an address not leased or
 				// the timeout did the work for us
@@ -177,7 +182,7 @@ func (sc *SharedContext) RemoveIPMapping(ipAddr *net.IP, hwAddr *net.HardwareAdd
 				return nil
 			}
 
-			_, err = tx.Del(ctx, ipAddr.String()).Result()
+			_, err = tx.Del(ctx, "ip:"+ipAddr.String()).Result()
 			if err != nil {
 				return err
 			}
@@ -191,7 +196,7 @@ func (sc *SharedContext) RemoveIPMapping(ipAddr *net.IP, hwAddr *net.HardwareAdd
 			}
 
 			return err
-		}, ipAddr.String(), LEASING_RANGE_BITSET, IP_MAC_MAPPING_SET)
+		}, "ip:"+ipAddr.String(), LEASING_RANGE_BITSET, IP_MAC_MAPPING_SET)
 
 		if err == redis.TxFailedErr {
 			continue
@@ -201,6 +206,46 @@ func (sc *SharedContext) RemoveIPMapping(ipAddr *net.IP, hwAddr *net.HardwareAdd
 	}
 
 	return fmt.Errorf("Error max retry transaction attempts exceeded (%d)", sc.maxTxRetryAttempts)
+}
+
+func CleanUpAvailableIpRange(client *redis.Client) error {
+	ctx := context.Background()
+
+	_, err := client.Del(ctx, LEASING_RANGE_BITSET).Result()
+	if err != nil {
+		return fmt.Errorf("Error deleting Redis set %s: %s", LEASING_RANGE_BITSET, err)
+	}
+
+	return nil
+}
+
+func CleanUpIpMacMapping(client *redis.Client) error {
+	ctx := context.Background()
+
+	_, err := client.Del(ctx, IP_MAC_MAPPING_SET).Result()
+	if err != nil {
+		return fmt.Errorf("Error deleting Redis set %s: %s", IP_MAC_MAPPING_SET, err)
+	}
+
+	return nil
+}
+
+func CleanUpIpSets(client *redis.Client) error {
+	ctx := context.Background()
+
+	sSlice, err := client.Keys(ctx, "ip:*").Result()
+	if err != nil {
+		return fmt.Errorf("Error obtaining keys from Redis: %s", err)
+	}
+
+	for _, keyStr := range sSlice {
+		_, err = client.Del(ctx, keyStr).Result()
+		if err != nil {
+			return fmt.Errorf("Error deleting key %s from Redis: %s", keyStr, err)
+		}
+	}
+
+	return nil
 }
 
 func InitAvailableIpRange(client *redis.Client, leasesRange uint8) {
@@ -214,5 +259,96 @@ func InitAvailableIpRange(client *redis.Client, leasesRange uint8) {
 	_, err := client.Set(ctx, LEASING_RANGE_BITSET, bitsetStr, 0).Result()
 	if err != nil {
 		log.Printf("Error during init of BitSet %s\n", LEASING_RANGE_BITSET)
+	}
+}
+
+func (sc *SharedContext) CleanUpExpiredMappings(leaseTime, schedule time.Duration, logger *log.Logger) error {
+	ctx := context.Background()
+	ticker := time.NewTicker(schedule)
+
+	for {
+		<-ticker.C
+		var sSlice []string
+		score := fmt.Sprintf("%d", time.Duration(time.Now().UnixNano())-leaseTime)
+		sSlice, err := sc.client.ZRangeByScore(ctx, IP_MAC_MAPPING_SET, &redis.ZRangeBy{Min: "-inf", Max: score}).Result()
+		if err != nil {
+			return fmt.Errorf("Error obtaining Redis set elements: %s", IP_MAC_MAPPING_SET)
+		}
+
+		for _, keyStr := range sSlice {
+			pos := strings.IndexRune(keyStr, '-')
+			if pos == -1 {
+				continue
+			}
+
+			for i := uint8(0); i < sc.maxTxRetryAttempts; i++ {
+				err := sc.client.Watch(ctx, func(tx *redis.Tx) error {
+					// check present of mapping
+					res, err := tx.Get(ctx, keyStr[:pos]).Result()
+					if err != nil {
+						return err
+					}
+
+					// check if the mac address corresponds with the one
+					// assigned and now expired
+					if keyStr[pos:] != res {
+						// a new assignment has been performed between the
+						// last two clean up
+						return nil
+					}
+
+					// delete the assignment from the mapping set
+					err = tx.Del(ctx, keyStr[:pos]).Err()
+					if err != nil {
+						return err
+					}
+
+					// set the bit related to the released ip to 0
+					err = tx.SetBit(ctx, LEASING_RANGE_BITSET, int64(dhcp4.IPRange(*sc.rangeStartIp, net.ParseIP(keyStr[:pos]))-1),
+						0).Err()
+					if err != nil {
+						return err
+					}
+
+					return nil
+				}, "ip:"+keyStr[:pos], LEASING_RANGE_BITSET)
+
+				if err == redis.Nil || err == nil {
+					// if nothing has been found or nothing gone wrong
+					// break the cycle
+					break
+				} else if err == redis.TxFailedErr {
+					// if the optimistic lock failed, retry
+					continue
+				} else {
+					// otherwise, show the error on provided logger
+					logger.Println(err)
+					break
+				}
+			}
+		}
+
+		for i := uint8(0); i < sc.maxTxRetryAttempts; i++ {
+			// remove all keys from the mapping set
+			err = sc.client.Watch(ctx, func(tx *redis.Tx) error {
+				err = tx.ZRemRangeByScore(ctx, IP_MAC_MAPPING_SET, "-inf", score).Err()
+				if err != nil {
+					return fmt.Errorf("Error removing range from Redis set: %s", err)
+				}
+
+				return nil
+			}, IP_MAC_MAPPING_SET)
+
+			if err == redis.TxFailedErr {
+				continue
+			} else if err != nil && err != redis.Nil {
+				break
+			} else if err != nil {
+				logger.Println(err)
+				break
+			}
+		}
+
+		logger.Println("DHCP db clean up performed")
 	}
 }

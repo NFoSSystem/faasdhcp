@@ -1,4 +1,4 @@
-module faasdhcp
+module bitbucket.org/Manaphy91/faasdhcp
 
 go 1.15
 

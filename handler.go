@@ -1,11 +1,11 @@
 package main
 
 import (
-	"faasdhcp/dhcpdb"
 	"log"
 	"net"
 	"time"
 
+	"bitbucket.org/Manaphy91/faasdhcp/dhcpdb"
 	"github.com/go-redis/redis/v8"
 	dhcp "github.com/krolaw/dhcp4"
 )
@@ -42,6 +42,10 @@ func NewHandler(serverIP, startIP, subnet, router, serverDNS *net.IP, leaseRange
 		},
 		sc: sc,
 	}
+}
+
+func (h *DHCPHandler) Close() error {
+	return h.sc.Close()
 }
 
 func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options dhcp.Options) (d dhcp.Packet) {
