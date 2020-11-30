@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"bitbucket.org/Manaphy91/faasdhcp/dhcpdb"
+	"bitbucket.org/Manaphy91/faasdhcp/utils"
 	"github.com/go-redis/redis/v8"
 	dhcp "github.com/krolaw/dhcp4"
 )
@@ -58,15 +59,15 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 			return
 		}
 
-		log.Printf("Incoming DHCP Discover request from %s\n", p.CHAddr())
-		log.Printf("IP address %s offered to %s\n", free, p.CHAddr())
+		utils.Log.Printf("Incoming DHCP Discover request from %s\n", p.CHAddr())
+		utils.Log.Printf("IP address %s offered to %s\n", free, p.CHAddr())
 
 		return dhcp.ReplyPacket(p, dhcp.Offer, h.ip, *free, h.leaseDuration,
 			h.options.SelectOrderOrAll(options[dhcp.OptionParameterRequestList]))
 
 	case dhcp.Request:
 
-		log.Printf("Incoming DHCP Request request from %s\n", p.CHAddr())
+		utils.Log.Printf("Incoming DHCP Request request from %s\n", p.CHAddr())
 
 		if server, ok := options[dhcp.OptionServerIdentifier]; ok && !net.IP(server).Equal(h.ip) {
 			return nil // Message not for this dhcp server
@@ -76,24 +77,24 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 			reqIP = net.IP(p.CIAddr())
 		}
 
-		log.Printf("Start processing of request for IP address %s made by %s\n", reqIP, p.CHAddr())
+		utils.Log.Printf("Start processing of request for IP address %s made by %s\n", reqIP, p.CHAddr())
 
 		if len(reqIP) == 4 && !reqIP.Equal(net.IPv4zero) {
 			if leaseNum := dhcp.IPRange(h.start, reqIP) - 1; leaseNum >= 0 && leaseNum < h.leaseRange {
 
 				hwAddr, err := h.sc.GetPortMACMapping(&reqIP)
 				if err != nil && err != redis.Nil {
-					log.Println(err)
+					utils.Log.Println(err)
 					return
 				} else if hwAddr == nil || hwAddr.String() == p.CHAddr().String() {
 					hwAddress := p.CHAddr()
 					err := h.sc.AddIPMACMapping(&reqIP, &hwAddress, h.leaseDuration)
 					if err != nil {
-						log.Println(err)
+						utils.Log.Println(err)
 						return
 					}
 
-					log.Printf("Confirmed IP address %s for %s\n", reqIP, p.CHAddr())
+					utils.Log.Printf("Confirmed IP address %s for %s\n", reqIP, p.CHAddr())
 
 					return dhcp.ReplyPacket(p, dhcp.ACK, h.ip, reqIP, h.leaseDuration,
 						h.options.SelectOrderOrAll(options[dhcp.OptionParameterRequestList]))
@@ -107,13 +108,13 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 		ipAddress := p.CIAddr()
 		hwAddress := p.CHAddr()
 
-		log.Printf("Incoming DHCP Release/Decline from %s [ip: %s]\n", hwAddress, ipAddress)
+		utils.Log.Printf("Incoming DHCP Release/Decline from %s [ip: %s]\n", hwAddress, ipAddress)
 
 		if err := h.sc.RemoveIPMapping(&ipAddress, &hwAddress); err != nil {
-			log.Println(err)
+			utils.Log.Println(err)
 		}
 
-		log.Printf("Mapping %s - %s released\n", hwAddress, ipAddress)
+		utils.Log.Printf("Mapping %s - %s released\n", hwAddress, ipAddress)
 
 	}
 	return nil
