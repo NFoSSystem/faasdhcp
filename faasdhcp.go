@@ -6,9 +6,10 @@ import (
 	"net"
 	"time"
 
-	"bitbucket.org/Manaphy91/faasdhcp/dhcpdb"
-	"bitbucket.org/Manaphy91/faasdhcp/utils"
-	"bitbucket.org/Manaphy91/nflib"
+	"dhcpdb"
+	"nflib"
+	"utils"
+
 	"github.com/krolaw/dhcp4"
 )
 
@@ -50,7 +51,7 @@ func Main(obj map[string]interface{}) map[string]interface{} {
 	subnetIp := &net.IP{255, 255, 255, 0}
 	routerIp := &net.IP{192, 168, 1, 254}
 	dnsIp := &net.IP{192, 168, 1, 254}
-	client := dhcpdb.NewRedisClient("localhost", 6379)
+	client := dhcpdb.NewRedisClient(serverIp.String(), 6379)
 
 	nflib.SendPingMessageToRouter(utils.Log, utils.Log)
 

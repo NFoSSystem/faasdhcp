@@ -5,8 +5,9 @@ import (
 	"net"
 	"time"
 
-	"bitbucket.org/Manaphy91/faasdhcp/dhcpdb"
-	"bitbucket.org/Manaphy91/faasdhcp/utils"
+	"dhcpdb"
+	"utils"
+
 	"github.com/go-redis/redis/v8"
 	dhcp "github.com/krolaw/dhcp4"
 )

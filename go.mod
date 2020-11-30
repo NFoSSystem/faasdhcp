@@ -1,10 +1,17 @@
-module bitbucket.org/Manaphy91/faasdhcp
+module action
 
 go 1.15
 
+replace nflib => ./nflib
+
+replace dhcpdb => ./dhcpdb
+
+replace utils => ./utils
+
 require (
-	bitbucket.org/Manaphy91/faasnat v0.0.0-20201128204908-3cdfb48c3331
-	bitbucket.org/Manaphy91/nflib v0.0.0-20201129173450-4d8ab6a116a6
+	dhcpdb v0.0.0-00010101000000-000000000000
 	github.com/go-redis/redis/v8 v8.4.0
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
+	nflib v0.0.0-00010101000000-000000000000
+	utils v0.0.0-00010101000000-000000000000
 )
