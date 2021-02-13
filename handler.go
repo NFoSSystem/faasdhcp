@@ -1,15 +1,19 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"dhcpdb"
 	"utils"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/google/netstack/tcpip/header"
 	dhcp "github.com/krolaw/dhcp4"
+	"golang.org/x/net/ipv4"
 )
 
 type lease struct {
@@ -119,4 +123,85 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 
 	}
 	return nil
+}
+
+type SFServerConn struct {
+	inConn  *net.UDPConn
+	outConn *ipv4.PacketConn
+}
+
+func NewSFServerConn(udpSocketPort int) (*SFServerConn, error) {
+	sfConn := new(SFServerConn)
+
+	tmpConn, err := net.ListenUDP("udp", &net.UDPAddr{net.IPv4(0, 0, 0, 0), udpSocketPort, ""})
+	if err != nil {
+		return nil, fmt.Errorf("Error opening UDP socket on port %d: %s\n", udpSocketPort, err)
+	}
+	sfConn.inConn = tmpConn
+
+	conn, err := net.ListenPacket("udp", ":67")
+	if err != nil {
+		return nil, fmt.Errorf("Error opening UDP socket on port 67: %s\n", err)
+	}
+
+	outConn := ipv4.NewPacketConn(conn)
+	if err := outConn.SetControlMessage(ipv4.FlagInterface, true); err != nil {
+		return nil, fmt.Errorf("Error opening UDP socket on port 67: %s\n", err)
+	}
+	sfConn.outConn = outConn
+
+	return sfConn, nil
+}
+
+func (s *SFServerConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	// second parameter temporarily set to nil
+	utils.Log.Println("DEBUG Before write to UDP socket")
+	size, err := s.outConn.WriteTo(b, nil, addr)
+	if err != nil {
+		utils.Log.Printf("Error writing to UDP socket: %s\n", err)
+	}
+	return size, nil
+}
+
+type SFAddress struct {
+	netStr  string
+	addrStr string
+}
+
+func (a *SFAddress) Network() string {
+	return a.netStr
+}
+
+func (a *SFAddress) String() string {
+	return a.addrStr
+}
+
+func (s *SFServerConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	buff := make([]byte, 65535)
+	utils.Log.Println("DEBUG Before read from UDP socket")
+	size, err := s.inConn.Read(buff)
+	if err != nil {
+		utils.Log.Printf("Error reading incoming message from UDP socket: %s\n", err)
+	}
+	utils.Log.Println("DEBUG Packet read from UDP socket")
+
+	ipPkt := header.IPv4(buff[:size])
+	udpPkt := header.UDP(ipPkt.Payload())
+
+	copy(b, udpPkt.Payload())
+
+	return len(udpPkt.Payload()), &SFAddress{"udp", ipPkt.SourceAddress().String() + ":" + strconv.Itoa(int(udpPkt.SourcePort()))}, err
+}
+
+func (s *SFServerConn) Close() error {
+	var errStr string
+	if err := s.inConn.Close(); err != nil {
+		errStr = fmt.Sprintf("Error closing incoming connection: %s\n", err)
+	}
+
+	if err := s.outConn.Close(); err != nil {
+		errStr = fmt.Sprintf("%sError closing outgoing connection: %s\n", err)
+	}
+
+	return fmt.Errorf(errStr)
 }

@@ -104,7 +104,7 @@ var GetIPsFromPkt func([]byte) (net.IP, net.IP, error) = GetIPsFromBytes(UDP_IP_
 /*
 Send ping message to the gateway
 */
-func SendPingMessageToRouter(debugLog *log.Logger, errLog *log.Logger) {
+func SendPingMessageToRouter(actionName string, debugLog *log.Logger, errLog *log.Logger) {
 	rIp := GetGatewayIP()
 	lIp, err := GetLocalIpAddr()
 	if err != nil {
@@ -112,14 +112,14 @@ func SendPingMessageToRouter(debugLog *log.Logger, errLog *log.Logger) {
 	}
 
 	port := 9082
-	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{rIp, port, ""})
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{rIp, port, ""})
 	if err != nil {
-		errLog.Printf("Error opening UDP connection to ip %s and port %d. Action will be terminated.\n", rIp, port)
+		errLog.Printf("Error opening TCP connection to ip %s and port %d. Action will be terminated.\n", rIp, port)
 	}
 
 	debugLog.Printf("Ping message sent to IP %s at port %d\n", rIp, port)
 
-	pkt := NewMsg(lIp, 9826)
+	pkt := NewMsg(lIp, actionName, 9826)
 	tBuff := GetBytesFromMsg(*pkt)
 
 	conn.Write(tBuff)
