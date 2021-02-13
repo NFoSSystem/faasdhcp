@@ -39,6 +39,6 @@ func main() {
 
 	handler := NewHandler(serverIp, startIp, subnetIp, routerIp, dnsIp, 1000000000, time.Hour, client)
 	defer handler.Close()
-	log.Printf("Starting DHCP Server - Listening port: %d - Starting IP: %s\n", port, startIp.String())
+	log.Printf("Starting DHCP Server - Listening port: %d - Starting IP: %s\nStart time: %d\n", port, startIp.String(), time.Now().UnixNano())
 	log.Fatal(ListenAndServe(handler, port))
 }
