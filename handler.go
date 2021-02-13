@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"time"
@@ -25,15 +26,15 @@ type DHCPHandler struct {
 	sc            *dhcpdb.SharedContext
 }
 
-func NewHandler(serverIP, startIP, subnet, router, serverDNS *net.IP, leaseRange int, leaseDuration time.Duration, client *redis.Client) *DHCPHandler {
+func NewHandler(serverIP, startIP, subnet, router, serverDNS *net.IP, leaseRange uint64, leaseDuration time.Duration, client *redis.Client) *DHCPHandler {
 
-	sc := dhcpdb.NewSharedContext(client, uint8(leaseRange), startIP, 5)
+	sc := dhcpdb.NewSharedContext(client, leaseRange, startIP, 5)
 
 	return &DHCPHandler{
 		ip:            *serverIP,
 		leaseDuration: leaseDuration,
 		start:         *startIP,
-		leaseRange:    leaseRange,
+		leaseRange:    int(leaseRange),
 		leases:        make(map[int]lease, 10),
 		options: dhcp.Options{
 			dhcp.OptionSubnetMask:       []byte(*subnet),
@@ -58,15 +59,15 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 			return
 		}
 
-		log.Printf("Incoming DHCP Discover request from %s\n", p.CHAddr())
-		log.Printf("IP address %s offered to %s\n", free, p.CHAddr())
+		//log.Printf("Incoming DHCP Discover request from %s\n", p.CHAddr())
+		//log.Printf("IP address %s offered to %s\n", free, p.CHAddr())
 
 		return dhcp.ReplyPacket(p, dhcp.Offer, h.ip, *free, h.leaseDuration,
 			h.options.SelectOrderOrAll(options[dhcp.OptionParameterRequestList]))
 
 	case dhcp.Request:
 
-		log.Printf("Incoming DHCP Request request from %s\n", p.CHAddr())
+		//log.Printf("Incoming DHCP Request request from %s\n", p.CHAddr())
 
 		if server, ok := options[dhcp.OptionServerIdentifier]; ok && !net.IP(server).Equal(h.ip) {
 			return nil // Message not for this dhcp server
@@ -76,7 +77,7 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 			reqIP = net.IP(p.CIAddr())
 		}
 
-		log.Printf("Start processing of request for IP address %s made by %s\n", reqIP, p.CHAddr())
+		//log.Printf("Start processing of request for IP address %s made by %s\n", reqIP, p.CHAddr())
 
 		if len(reqIP) == 4 && !reqIP.Equal(net.IPv4zero) {
 			if leaseNum := dhcp.IPRange(h.start, reqIP) - 1; leaseNum >= 0 && leaseNum < h.leaseRange {
@@ -93,7 +94,7 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 						return
 					}
 
-					log.Printf("Confirmed IP address %s for %s\n", reqIP, p.CHAddr())
+					//log.Printf("Confirmed IP address %s for %s\n", reqIP, p.CHAddr())
 
 					return dhcp.ReplyPacket(p, dhcp.ACK, h.ip, reqIP, h.leaseDuration,
 						h.options.SelectOrderOrAll(options[dhcp.OptionParameterRequestList]))
@@ -107,14 +108,23 @@ func (h *DHCPHandler) ServeDHCP(p dhcp.Packet, msgType dhcp.MessageType, options
 		ipAddress := p.CIAddr()
 		hwAddress := p.CHAddr()
 
-		log.Printf("Incoming DHCP Release/Decline from %s [ip: %s]\n", hwAddress, ipAddress)
+		//log.Printf("Incoming DHCP Release/Decline from %s [ip: %s]\n", hwAddress, ipAddress)
 
 		if err := h.sc.RemoveIPMapping(&ipAddress, &hwAddress); err != nil {
 			log.Println(err)
 		}
 
-		log.Printf("Mapping %s - %s released\n", hwAddress, ipAddress)
+		//log.Printf("Mapping %s - %s released\n", hwAddress, ipAddress)
 
 	}
 	return nil
+}
+
+func ListenAndServe(handler dhcp.Handler, port uint16) error {
+	l, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+	return dhcp.Serve(l, handler)
 }

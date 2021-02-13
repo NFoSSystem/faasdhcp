@@ -22,7 +22,7 @@ const (
 
 type SharedContext struct {
 	client             *redis.Client
-	maxLeaseRange      uint8
+	maxLeaseRange      uint64
 	rangeStartIp       *net.IP
 	maxTxRetryAttempts uint8
 }
@@ -35,7 +35,7 @@ func NewRedisClient(hostname string, port uint16) *redis.Client {
 	})
 }
 
-func NewSharedContext(client *redis.Client, maxLeaseRange uint8, startIP *net.IP, maxTxRetryAttempts uint8) *SharedContext {
+func NewSharedContext(client *redis.Client, maxLeaseRange uint64, startIP *net.IP, maxTxRetryAttempts uint8) *SharedContext {
 	return &SharedContext{
 		client:             client,
 		maxLeaseRange:      maxLeaseRange,
@@ -44,7 +44,7 @@ func NewSharedContext(client *redis.Client, maxLeaseRange uint8, startIP *net.IP
 	}
 }
 
-func getLastRangeByte(maxLeaseRange uint8) uint8 {
+func getLastRangeByte(maxLeaseRange uint64) uint64 {
 	res := maxLeaseRange >> 3
 	if maxLeaseRange%8 == 0 {
 		return res - 1
@@ -66,7 +66,7 @@ func (sc *SharedContext) GetFirstAvailableAddress() (*net.IP, error) {
 	for i := uint8(0); i < sc.maxTxRetryAttempts; i++ {
 		res := sc.client.Watch(ctx, func(tx *redis.Tx) error {
 
-			pos, err = tx.BitPos(ctx, LEASING_RANGE_BITSET, 0, 0, int64(getLastRangeByte(sc.maxLeaseRange))).Result()
+			pos, err = tx.BitPos(ctx, LEASING_RANGE_BITSET, 0 /*0 , int64(getLastRangeByte(sc.maxLeaseRange))*/).Result()
 
 			if err != nil && err != redis.Nil {
 				return err
@@ -115,7 +115,7 @@ func (sc *SharedContext) AddIPMACMapping(ipAddr *net.IP, hwAddr *net.HardwareAdd
 
 	for i := uint8(0); i < sc.maxTxRetryAttempts; i++ {
 		res := sc.client.Watch(ctx, func(tx *redis.Tx) error {
-			pos, err := tx.BitPos(ctx, LEASING_RANGE_BITSET, 0, 0, int64(getLastRangeByte(sc.maxLeaseRange))).Result()
+			pos, err := tx.BitPos(ctx, LEASING_RANGE_BITSET, 0, 0 /*, int64(getLastRangeByte(sc.maxLeaseRange))*/).Result()
 
 			if err != nil && err != redis.Nil {
 				return err
