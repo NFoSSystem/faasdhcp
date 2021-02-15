@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"bitbucket.org/Manaphy91/faasdhcp/dhcpdb"
@@ -126,5 +127,54 @@ func ListenAndServe(handler dhcp.Handler, port uint16) error {
 		return err
 	}
 	defer l.Close()
-	return dhcp.Serve(l, handler)
+	return Serve(l, handler)
+}
+
+func Serve(conn dhcp.ServeConn, handler dhcp.Handler) error {
+	buffer := make([]byte, 1500)
+	for {
+		n, addr, err := conn.ReadFrom(buffer)
+		if err != nil {
+			return err
+		}
+		if n < 240 { // Packet too small to be DHCP
+			continue
+		}
+		req := dhcp.Packet(buffer[:n])
+		if req.HLen() > 16 { // Invalid size
+			continue
+		}
+		options := req.ParseOptions()
+		var reqType dhcp.MessageType
+		if t := options[dhcp.OptionDHCPMessageType]; len(t) != 1 {
+			continue
+		} else {
+			reqType = dhcp.MessageType(t[0])
+			if reqType < dhcp.Discover || reqType > dhcp.Inform {
+				continue
+			}
+		}
+
+		go handleDHCPRequest(conn, handler, req, reqType, options, addr)
+	}
+}
+
+func handleDHCPRequest(conn dhcp.ServeConn, handler dhcp.Handler, req1 dhcp.Packet, reqType1 dhcp.MessageType, opt dhcp.Options, addr1 net.Addr) error {
+	if res := handler.ServeDHCP(req1, reqType1, opt); res != nil {
+		// If IP not available, broadcast
+		ipStr, portStr, err := net.SplitHostPort(addr1.String())
+		if err != nil {
+			return err
+		}
+
+		if net.ParseIP(ipStr).Equal(net.IPv4zero) || req1.Broadcast() {
+			port, _ := strconv.Atoi(portStr)
+			addr1 = &net.UDPAddr{IP: net.IPv4bcast, Port: port}
+		}
+		if _, e := conn.WriteTo(res, addr1); e != nil {
+			return e
+		}
+	}
+
+	return nil
 }

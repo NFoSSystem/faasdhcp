@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -24,6 +25,15 @@ func main() {
 			port = uint16(val)
 		}
 	}
+
+	go func() {
+		tick := time.NewTicker(500 * time.Millisecond)
+
+		for {
+			<-tick.C
+			debug.FreeOSMemory()
+		}
+	}()
 
 	serverIp := &net.IP{192, 168, 1, 249}
 	startIp := &net.IP{10, 0, 0, 1}
