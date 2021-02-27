@@ -104,7 +104,7 @@ var GetIPsFromPkt func([]byte) (net.IP, net.IP, error) = GetIPsFromBytes(UDP_IP_
 /*
 Send ping message to the gateway
 */
-func SendPingMessageToRouter(actionName string, debugLog *log.Logger, errLog *log.Logger) {
+func SendPingMessageToRouter(actionName string, debugLog *log.Logger, errLog *log.Logger, cntId uint16, repl bool) {
 	rIp := GetGatewayIP()
 	lIp, err := GetLocalIpAddr()
 	if err != nil {
@@ -119,7 +119,7 @@ func SendPingMessageToRouter(actionName string, debugLog *log.Logger, errLog *lo
 
 	debugLog.Printf("Ping message sent to IP %s at port %d\n", rIp, port)
 
-	pkt := NewMsg(lIp, actionName, 9826)
+	pkt := NewMsg(lIp, actionName, 9826, cntId, repl)
 	tBuff := GetBytesFromMsg(*pkt)
 
 	conn.Write(tBuff)

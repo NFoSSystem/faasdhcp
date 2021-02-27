@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -33,7 +34,7 @@ type DHCPHandler struct {
 
 func NewHandler(serverIP, startIP, subnet, router, serverDNS *net.IP, leaseRange int, leaseDuration time.Duration, client *redis.Client) *DHCPHandler {
 
-	sc := dhcpdb.NewSharedContext(client, uint8(leaseRange), startIP, 5)
+	sc := dhcpdb.NewSharedContext(client, uint32(leaseRange), startIP, 5)
 
 	return &DHCPHandler{
 		ip:            *serverIP,
@@ -155,7 +156,6 @@ func NewSFServerConn(udpSocketPort int) (*SFServerConn, error) {
 
 func (s *SFServerConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	// second parameter temporarily set to nil
-	utils.Log.Println("DEBUG Before write to UDP socket")
 	size, err := s.outConn.WriteTo(b, nil, addr)
 	if err != nil {
 		utils.Log.Printf("Error writing to UDP socket: %s\n", err)
@@ -176,14 +176,19 @@ func (a *SFAddress) String() string {
 	return a.addrStr
 }
 
+var terminateSignal int = len([]byte("terminate"))
+
 func (s *SFServerConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	buff := make([]byte, 65535)
-	utils.Log.Println("DEBUG Before read from UDP socket")
 	size, err := s.inConn.Read(buff)
 	if err != nil {
 		utils.Log.Printf("Error reading incoming message from UDP socket: %s\n", err)
 	}
-	utils.Log.Println("DEBUG Packet read from UDP socket")
+
+	if size == terminateSignal && string(buff[:size]) == "terminate" {
+		utils.Log.Printf("Received terminate signal")
+		os.Exit(0)
+	}
 
 	ipPkt := header.IPv4(buff[:size])
 	udpPkt := header.UDP(ipPkt.Payload())
