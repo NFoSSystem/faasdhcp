@@ -1,9 +1,7 @@
-bitbucket.org/Manaphy91/faasnat v0.0.0-20201128204908-3cdfb48c3331 h1:Skh64GQ3dyW94IDfs7PxASrlwK8+yj66+pk5vvV2OAA=
-bitbucket.org/Manaphy91/faasnat v0.0.0-20201128204908-3cdfb48c3331/go.mod h1:vnK7C6EZ0X/1cTipgnjvCE45nR1cNuA0jlMmHI0ydSo=
-bitbucket.org/Manaphy91/nflib v0.0.0-20201129173450-4d8ab6a116a6 h1:NtIMi5K4/4/tXWIr7o8YP5SVCaoM5wT6hSYf5N0aepc=
-bitbucket.org/Manaphy91/nflib v0.0.0-20201129173450-4d8ab6a116a6/go.mod h1:TF6YkFI3k8iiqeCme6PL7cdynnbk+roojULsoZAwZ8E=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
+github.com/NFoSSystem/nflib v0.0.0-20211127182900-bb958aa10f28 h1:nSAVHrr+2ZqOsIFiydn8UvWoKveN6TUs343XGbk1dv4=
+github.com/NFoSSystem/nflib v0.0.0-20211127182900-bb958aa10f28/go.mod h1:YVS827eCR3MUSm5X0pl3rmXS6+Ofv4xeEkNNB+n7bRc=
 github.com/bsm/redislock v0.7.0 h1:RL7aZJhCKkuBjQbnSTKCeedTRifBWxd/ffP+GZ599Mo=
 github.com/bsm/redislock v0.7.0/go.mod h1:3Kgu+cXw0JrkZ5pmY/JbcFpixGZ5M9v9G2PGWYqku+k=
 github.com/cespare/xxhash/v2 v2.1.1 h1:6MnRN8NT7+YBpUIWxHtefFZOKTAPgGjpQSxqLNn0+qY=
